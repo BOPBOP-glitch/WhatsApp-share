@@ -44,3 +44,12 @@ Test on a secondary WhatsApp installation/account first. These patches are exper
 ## Attribution
 
 Built from the GPL-3.0 Morphe patch template and selected GPL-3.0 PichiWA patch logic. See `NOTICE` and `LICENSE`.
+
+
+## Direct metadata URL
+
+If repository-source loading is affected by a GitHub raw/CDN issue, Morphe also accepts the metadata file directly:
+
+`https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/patches-bundle.json`
+
+The published bundle itself is served from the matching GitHub Release.
