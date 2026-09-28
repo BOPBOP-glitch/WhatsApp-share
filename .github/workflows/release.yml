@@ -11,9 +11,7 @@ jobs:
     name: Build and publish Morphe patches
     permissions:
       contents: write
-      packages: write
-      id-token: write
-      attestations: write
+      packages: read
     runs-on: ubuntu-latest
 
     steps:
@@ -33,22 +31,31 @@ jobs:
         with:
           gradle-version: "9.7.1"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+      - name: Build Morphe bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gradle :patches:buildAndroid --no-daemon
+          gradle generatePatchesList --no-daemon
+          MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
+          test -n "$MPP"
+          cp "$MPP" patches-1.0.0.mpp
+
+      - name: Commit generated patch list
+        run: |
+          if ! git diff --quiet -- patches-list.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add patches-list.json
+            git commit -m "chore: update generated patch list [skip ci]"
+            git push
+          fi
+
+      - name: Publish v1.0.0
+        uses: softprops/action-gh-release@v2
         with:
-          node-version: "lts/*"
-
-      - name: Install release dependencies
-        run: npm install
-
-      - name: Semantic release
-        id: release
-        uses: cycjimmy/semantic-release-action@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify project compiles
-        if: steps.release.outputs.new_release_published != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gradle :patches:buildAndroid clean --no-daemon
+          tag_name: v1.0.0
+          name: WhatsApp Morphe Patches v1.0.0
+          body: Experimental no-root Morphe patches for WhatsApp 2.26.27.4.
+          files: patches-1.0.0.mpp
+          make_latest: true
