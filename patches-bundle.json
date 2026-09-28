@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-09-28T17:45:00",
-  "description": "WhatsApp Morphe Patches v1.0.0 — experimental no-root patches for WhatsApp 2.26.27.4.",
-  "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v1.0.0/patches-1.0.0.mpp",
+  "created_at": "2026-09-28T18:02:37Z",
+  "description": "WhatsApp Morphe Patches v1.0.1 — experimental no-root patches for WhatsApp 2.26.27.4.",
+  "download_url": "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/dist/patches-1.0.1.mpp",
   "signature_download_url": "",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
