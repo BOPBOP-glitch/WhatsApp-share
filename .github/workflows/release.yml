@@ -44,18 +44,18 @@ jobs:
           MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
           test -n "$MPP"
           mkdir -p dist
-          cp "$MPP" dist/patches-1.0.1.mpp
+          cp "$MPP" dist/patches-1.0.2.mpp
 
       - name: Write source metadata
         run: |
-          CREATED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          CREATED_AT="$(date -u +'%Y-%m-%dT%H:%M:%S')"
           cat > patches-bundle.json <<EOF
           {
             "created_at": "$CREATED_AT",
-            "description": "WhatsApp Morphe Patches v1.0.1 — experimental no-root patches for WhatsApp 2.26.27.4.",
-            "download_url": "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/dist/patches-1.0.1.mpp",
+            "description": "WhatsApp Morphe Patches v1.0.2 — experimental no-root patches for WhatsApp 2.26.27.4.",
+            "download_url": "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/dist/patches-1.0.2.mpp",
             "signature_download_url": "",
-            "version": "1.0.1"
+            "version": "1.0.2"
           }
           EOF
 
@@ -63,9 +63,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add patches-list.json patches-bundle.json dist/patches-1.0.1.mpp
+          git add patches-list.json patches-bundle.json dist/patches-1.0.2.mpp
           if ! git diff --cached --quiet; then
-            git commit -m "chore: publish Morphe source v1.0.1 [skip ci]"
+            git commit -m "chore: publish Morphe source v1.0.2 [skip ci]"
             git pull --rebase origin main
             git push origin main
           fi
@@ -73,15 +73,15 @@ jobs:
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whatsapp-morphe-patches-1.0.1
-          path: dist/patches-1.0.1.mpp
+          name: whatsapp-morphe-patches-1.0.2
+          path: dist/patches-1.0.2.mpp
           if-no-files-found: error
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: WhatsApp Morphe Patches v1.0.1
+          tag_name: v1.0.2
+          name: WhatsApp Morphe Patches v1.0.2
           body: Experimental no-root Morphe patches for WhatsApp 2.26.27.4.
-          files: dist/patches-1.0.1.mpp
+          files: dist/patches-1.0.2.mpp
           make_latest: true
