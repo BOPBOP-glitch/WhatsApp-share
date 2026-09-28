@@ -1,55 +1,36 @@
-# WhatsApp Morphe Patches
+# WhatsApp Morphe Patches — V2 Safe Compatibility
 
-Experimental **no-root** Morphe patch source for WhatsApp (`com.whatsapp`).
+V2 is being rebuilt around **compatibility first**.
 
-## Included patches
+## Main rule
 
-- Anti Revoke
-- Anti View Once / screenshot restriction bypass
-- Hide Read Receipts
-- Hide Typing Indicator
-- Prefer HD Media
-- Freeze Last Seen
-- Anti Detector
-- Login Fix (experimental; may require compatible microG-RE components)
+There is no credible way to guarantee that a modified WhatsApp account can never be restricted.
+For that reason, the stable V2 profile avoids anti-detection, login-integrity bypasses, server-limit
+bypasses, automation, bulk messaging, and protocol impersonation.
 
-All patches are **disabled by default**. Enable only the patch you need.
+## V2 Safe profile
 
-## Current target
+Target: **WhatsApp 2.26.27.4** only while V2 is under validation.
 
-- WhatsApp `2.26.27.4`
-- Morphe patcher `1.14.1`
-- Morphe Gradle plugin `1.3.4`
+Planned stable patch set:
 
-WhatsApp changes its obfuscated code frequently. A patch that works on one version can fail on a newer build.
+- Anti Revoke — local retention of revoked content
+- Anti View Once — local handling of view-once media
+- HD Media — local media quality preference
+- Copy Statuses — local UI feature
+- Remove Communities — local UI feature
+- Remove Updates — local UI feature
+- Anti Edit — local message-history behavior
+- Anti Disappearing — local message-retention behavior
 
-## Add to Morphe
+High-risk / compatibility-sensitive patches are intentionally excluded from the stable V2 bundle:
+Anti Detector, Login Fix, signature/integrity bypasses, forward-limit bypasses, network-security
+disabling, and similar patches.
 
-Repository source:
+## Compatibility policy
 
-`https://github.com/BOPBOP-glitch/WhatsApp-share`
+See [docs/COMPATIBILITY_V2.md](docs/COMPATIBILITY_V2.md) and
+[compatibility/2.26.27.4.json](compatibility/2.26.27.4.json).
 
-Direct add-source link:
-
-`https://morphe.software/add-source?github=BOPBOP-glitch/WhatsApp-share`
-
-## Releases
-
-A semantic commit to `main` triggers GitHub Actions. The workflow builds the Morphe `.mpp` bundle and publishes it as a GitHub Release.
-
-## Safety
-
-Test on a secondary WhatsApp installation/account first. These patches are experimental and are not affiliated with WhatsApp, Meta, Morphe, or PichiWA.
-
-## Attribution
-
-Built from the GPL-3.0 Morphe patch template and selected GPL-3.0 PichiWA patch logic. See `NOTICE` and `LICENSE`.
-
-
-## Direct metadata URL
-
-If repository-source loading is affected by a GitHub raw/CDN issue, Morphe also accepts the metadata file directly:
-
-`https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/patches-bundle.json`
-
-The published bundle itself is served from the matching GitHub Release.
+The V2 branch is experimental until an actual WhatsApp APK for the declared version passes
+patch-time and launch testing on-device.
