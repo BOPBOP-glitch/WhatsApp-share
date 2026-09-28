@@ -10,9 +10,13 @@ on:
       - "patches-bundle.json"
       - "patches-list.json"
 
+concurrency:
+  group: whatsapp-morphe-release
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Build and publish Morphe patches
+    name: Build, validate and publish Morphe patches
     permissions:
       contents: write
       packages: read
@@ -39,49 +43,108 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euxo pipefail
           gradle :patches:buildAndroid --no-daemon
           gradle generatePatchesList --no-daemon
           MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
           test -n "$MPP"
           mkdir -p dist
-          cp "$MPP" dist/patches-1.0.2.mpp
+          cp "$MPP" dist/patches-1.0.3.mpp
 
-      - name: Write source metadata
+      - name: Validate MPP archive and manifest
         run: |
+          set -euxo pipefail
+          MPP="dist/patches-1.0.3.mpp"
+          test -s "$MPP"
+          unzip -t "$MPP"
+          unzip -p "$MPP" META-INF/MANIFEST.MF | tee /tmp/morphe-manifest.txt
+          grep -F "Name: WhatsApp Morphe Patches" /tmp/morphe-manifest.txt
+          grep -F "Version: 1.0.3" /tmp/morphe-manifest.txt
+          grep -F "Patcher-Version: 1.14.1" /tmp/morphe-manifest.txt
+          python3 - <<'PY'
+          import json
+          with open("patches-list.json", encoding="utf-8") as f:
+              data = json.load(f)
+          assert data["version"] == "1.0.3", data["version"]
+          patches = data.get("patches", [])
+          assert len(patches) == 8, len(patches)
+          assert all(
+              any(pkg.get("packageName") == "com.whatsapp" for pkg in (p.get("compatiblePackages") or []))
+              for p in patches
+          )
+          print("patches-list.json validated:", len(patches), "WhatsApp patches")
+          PY
+          sha256sum "$MPP"
+
+      - name: Write Morphe source metadata
+        run: |
+          set -euxo pipefail
           CREATED_AT="$(date -u +'%Y-%m-%dT%H:%M:%S')"
           cat > patches-bundle.json <<EOF
           {
             "created_at": "$CREATED_AT",
-            "description": "WhatsApp Morphe Patches v1.0.2 — experimental no-root patches for WhatsApp 2.26.27.4.",
-            "download_url": "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/dist/patches-1.0.2.mpp",
+            "description": "WhatsApp Morphe Patches v1.0.3 - experimental no-root patches for WhatsApp 2.26.27.4.",
+            "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v1.0.3/patches-1.0.3.mpp",
             "signature_download_url": "",
-            "version": "1.0.2"
+            "version": "1.0.3"
           }
           EOF
+          python3 - <<'PY'
+          import json
+          from datetime import datetime
+          with open("patches-bundle.json", encoding="utf-8") as f:
+              data=json.load(f)
+          assert set(data) >= {"created_at","description","download_url","version"}
+          datetime.fromisoformat(data["created_at"])
+          assert data["version"] == "1.0.3"
+          assert data["download_url"].endswith("/v1.0.3/patches-1.0.3.mpp")
+          print("patches-bundle.json validated")
+          PY
+          cat patches-bundle.json
 
       - name: Commit published source files
         run: |
+          set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add patches-list.json patches-bundle.json dist/patches-1.0.2.mpp
+          git add patches-list.json patches-bundle.json dist/patches-1.0.3.mpp
           if ! git diff --cached --quiet; then
-            git commit -m "chore: publish Morphe source v1.0.2 [skip ci]"
+            git commit -m "chore: publish Morphe source v1.0.3 [skip ci]"
             git pull --rebase origin main
             git push origin main
           fi
 
-      - name: Upload bundle artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whatsapp-morphe-patches-1.0.2
-          path: dist/patches-1.0.2.mpp
+          name: whatsapp-morphe-patches-1.0.3
+          path: dist/patches-1.0.3.mpp
           if-no-files-found: error
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: WhatsApp Morphe Patches v1.0.2
-          body: Experimental no-root Morphe patches for WhatsApp 2.26.27.4.
-          files: dist/patches-1.0.2.mpp
+          tag_name: v1.0.3
+          name: WhatsApp Morphe Patches v1.0.3
+          body: Validated experimental no-root Morphe patches for WhatsApp 2.26.27.4.
+          files: dist/patches-1.0.3.mpp
           make_latest: true
+
+      - name: End-to-end public source validation
+        run: |
+          set -euxo pipefail
+          sleep 5
+          curl -fL --retry 5 --retry-delay 2             "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/patches-bundle.json?run=${GITHUB_RUN_ID}"             -o /tmp/remote-patches-bundle.json
+          python3 - <<'PY'
+          import json
+          from datetime import datetime
+          with open("/tmp/remote-patches-bundle.json", encoding="utf-8") as f:
+              data=json.load(f)
+          assert data["version"] == "1.0.3", data
+          datetime.fromisoformat(data["created_at"])
+          print("remote metadata validated:", data["download_url"])
+          PY
+          curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v1.0.3/patches-1.0.3.mpp"             -o /tmp/remote-patches-1.0.3.mpp
+          unzip -t /tmp/remote-patches-1.0.3.mpp
+          cmp dist/patches-1.0.3.mpp /tmp/remote-patches-1.0.3.mpp
+          echo "Public metadata and release asset validated end-to-end."
