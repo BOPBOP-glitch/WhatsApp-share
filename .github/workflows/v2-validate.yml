@@ -1,0 +1,73 @@
+name: Validate V2
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: Build and validate V2 safe bundle
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.7.1"
+
+      - name: Generate metadata
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gradle generatePatchesList --no-daemon
+
+      - name: Build Android bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gradle :patches:buildAndroid --no-daemon
+
+      - name: Validate bundle
+        run: |
+          set -euxo pipefail
+          MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
+          test -n "$MPP"
+          unzip -t "$MPP"
+          unzip -Z1 "$MPP" | grep -E '\.dex$'
+          unzip -p "$MPP" META-INF/MANIFEST.MF | tee /tmp/manifest.txt
+          grep -F "Name: WhatsApp Morphe Patches" /tmp/manifest.txt
+          python3 - <<'PY'
+          import json
+          with open("patches-list.json", encoding="utf-8") as f:
+              data=json.load(f)
+          names={p["name"] for p in data["patches"]}
+          expected={
+              "Anti Revoke","Anti View Once","HD Media","Copy Statuses",
+              "Remove Communities","Remove Updates","Anti Edit","Anti Disappearing"
+          }
+          assert names == expected, (names, expected)
+          for p in data["patches"]:
+              assert p.get("default") is False
+              pkgs=p.get("compatiblePackages") or []
+              assert any(x.get("packageName")=="com.whatsapp" for x in pkgs)
+          print("validated", len(data["patches"]), "V2 safe patches")
+          PY
+
+      - name: Upload validation bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatsapp-morphe-v2-safe
+          path: patches/build/libs/*.mpp
+          if-no-files-found: error
