@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "packageName": "com.whatsapp",
+  "version": "2.26.27.4",
+  "status": "experimental",
+  "profile": "v2-safe",
+  "patches": [
+    {
+      "name": "Anti Revoke",
+      "risk": "medium",
+      "default": false
+    },
+    {
+      "name": "Anti View Once",
+      "risk": "medium",
+      "default": false
+    },
+    {
+      "name": "HD Media",
+      "risk": "low",
+      "default": false
+    },
+    {
+      "name": "Copy Statuses",
+      "risk": "low",
+      "default": false
+    },
+    {
+      "name": "Remove Communities",
+      "risk": "low",
+      "default": false
+    },
+    {
+      "name": "Remove Updates",
+      "risk": "low",
+      "default": false
+    },
+    {
+      "name": "Anti Edit",
+      "risk": "medium",
+      "default": false
+    },
+    {
+      "name": "Anti Disappearing",
+      "risk": "medium",
+      "default": false
+    }
+  ],
+  "excluded": [
+    "Anti Detector",
+    "Login Fix",
+    "signature/integrity spoofing",
+    "network-security disabling",
+    "forward-limit bypass",
+    "automation/bulk messaging"
+  ],
+  "tests": {
+    "patchTime": false,
+    "launch": false,
+    "sendReceive": false,
+    "media": false,
+    "restart": false,
+    "soak": false
+  }
+}
