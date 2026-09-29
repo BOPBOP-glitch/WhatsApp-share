@@ -2,27 +2,22 @@
   "schema": 1,
   "packageName": "com.whatsapp",
   "version": "2.26.27.4",
-  "status": "experimental",
+  "status": "build-validated",
   "scope": "compatibility-only",
   "patchBehaviorChanged": false,
-  "patches": [
-    "Anti Detector",
-    "Anti Revoke",
-    "Anti View Once",
-    "Freeze Last Seen",
-    "Hide Read Receipts",
-    "Hide Typing",
-    "Login Fix",
-    "HD Media"
-  ],
+  "declaredExperimental": true,
+  "patchCount": 8,
   "tests": {
-    "bundleBuild": false,
-    "dexPresent": false,
-    "patchMetadata": false,
+    "bundleBuild": true,
+    "dexPresent": true,
+    "patchMetadata": true,
     "patchTime": false,
     "launch": false,
     "loginSession": false,
     "sendReceive": false,
     "restart": false
+  },
+  "evidence": {
+    "workflowRun": "36522729590"
   }
 }
