@@ -21,3 +21,16 @@ Its purpose is only to improve build and version compatibility around the existi
 - Status: experimental until real-device testing is completed.
 
 Compatibility work must not be described as anti-ban protection. Platform-side enforcement cannot be guaranteed by a patch bundle.
+
+
+## Patch versioning
+
+Development builds use SemVer prerelease numbers.
+
+- Current development series starts at `1.0.5-dev.1`.
+- Every development update increments only the final counter:
+  `1.0.5-dev.1` → `1.0.5-dev.2` → `1.0.5-dev.3`.
+- When the compatibility milestone is approved, the same series is promoted to `1.0.5`.
+- The next development cycle then starts at `1.0.6-dev.1`.
+
+This keeps the version valid for Gradle, GitHub releases, and semantic-version tooling.
