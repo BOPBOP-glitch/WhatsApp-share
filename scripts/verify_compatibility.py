@@ -58,3 +58,33 @@ for patch in patches["patches"]:
         fail(f"{patch['name']}: candidate {candidate} not declared; got {sorted(versions)}")
 
 print(f"Compatibility validation passed for {candidate}; {len(names)} patch sources remain frozen.")
+
+# Status promotion guard: compatibility states cannot be advanced without evidence.
+tests = record["tests"]
+status = record["status"]
+requirements = {
+    "build-validated": ("bundleBuild", "dexPresent", "patchMetadata"),
+    "patch-validated": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime"),
+    "device-validated": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime", "launch", "loginSession", "sendReceive", "restart"),
+    "stable": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime", "launch", "loginSession", "sendReceive", "restart"),
+}
+for key in requirements.get(status, ()):
+    if tests.get(key) is not True:
+        fail(f"Status {status} requires tests.{key}=true")
+
+matrix_versions = {item["version"]: item for item in matrix.get("versions", [])}
+if candidate not in matrix_versions:
+    fail(f"Candidate {candidate} missing from compatibility/matrix.json")
+
+matrix_entry = matrix_versions[candidate]
+if matrix_entry.get("status") != status:
+    fail(f"Matrix status {matrix_entry.get('status')} does not match record status {status}")
+
+if matrix.get("stableVersion") is not None:
+    stable_version = matrix["stableVersion"]
+    if stable_version not in matrix_versions:
+        fail(f"stableVersion {stable_version} missing from matrix versions")
+    if matrix_versions[stable_version].get("status") != "stable":
+        fail(f"stableVersion {stable_version} is not marked stable")
+
+print(f"Status promotion guard passed: {status}")
