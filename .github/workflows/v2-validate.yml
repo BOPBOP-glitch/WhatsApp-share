@@ -33,6 +33,8 @@ jobs:
               "scripts/verify_compatibility.py",
               "scripts/generate_compatibility_report.py",
               "scripts/add_compatibility_version.py",
+              "scripts/bump_patch_version.py",
+              "gradle.properties",
               "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt",
           )
           changed = subprocess.check_output(
@@ -49,6 +51,14 @@ jobs:
               sys.exit(1)
           print("Compatibility-only scope verified:", changed)
           PY
+
+      - name: Read patch version
+        run: |
+          set -euxo pipefail
+          PATCH_VERSION="$(sed -n 's/^version *= *//p' gradle.properties | xargs)"
+          test -n "$PATCH_VERSION"
+          echo "PATCH_VERSION=$PATCH_VERSION" >> "$GITHUB_ENV"
+          echo "Patch version: $PATCH_VERSION"
 
       - name: Setup Java
         uses: actions/setup-java@v6.0.0
@@ -80,8 +90,29 @@ jobs:
           MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
           test -n "$MPP"
           unzip -t "$MPP"
-          unzip -Z1 "$MPP" | grep -E '\.dex$'
+          unzip -Z1 "$MPP" | grep -E '\.dex
+
+      - name: Generate compatibility report
+        run: python3 scripts/generate_compatibility_report.py
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatsapp-morphe-compatibility-${{ env.PATCH_VERSION }}
+          path: |
+            patches/build/libs/*.mpp
+            build/compatibility-report.json
+          if-no-files-found: error
+
+          unzip -p "$MPP" META-INF/MANIFEST.MF | grep -F "Version: $PATCH_VERSION"
           python3 scripts/verify_compatibility.py
+          python3 - <<'PY'
+          import json, os
+          with open("patches-list.json", encoding="utf-8") as f:
+              data=json.load(f)
+          assert data["version"] == os.environ["PATCH_VERSION"], (data["version"], os.environ["PATCH_VERSION"])
+          print("patches-list version:", data["version"])
+          PY
 
       - name: Generate compatibility report
         run: python3 scripts/generate_compatibility_report.py
