@@ -6,25 +6,20 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.string
 import app.whatsappmorphe.patches.shared.Constants.WHATSAPP
 
-private const val EXT = "Lapp/pichiwa/extension/extension/WExtension;"
-
 @Suppress("unused")
 val antiDisappearing = bytecodePatch(
     name = "Anti Disappearing",
-    description = "Keep disappearing messages visible.",
+    description = "Keep disappearing messages available locally when the known expiry path is present.",
     default = false
 ) {
     compatibleWith(WHATSAPP)
 
     execute {
-        Fingerprint(returnType = "V", 
+        val fingerprint = Fingerprint(
+            returnType = "V",
             filters = listOf(string("expire_timestamp"))
-        ).let { match ->
-            match.method.addInstructions(0, """
-                return-void
-                :original
-            """)
-        }
+        )
+        val method = fingerprint.methodOrNull ?: return@execute
+        method.addInstructions(0, "return-void")
     }
 }
-
