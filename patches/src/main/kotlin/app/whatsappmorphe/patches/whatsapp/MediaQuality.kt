@@ -6,27 +6,24 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.string
 import app.whatsappmorphe.patches.shared.Constants.WHATSAPP
 
+private const val EXT = "Lapp/pichiwa/extension/extension/WExtension;"
+
 @Suppress("unused")
 val mediaQuality = bytecodePatch(
     name = "HD Media",
-    description = "Prefer the highest media quality path supported by this WhatsApp build.",
+    description = "Send images and videos without compression.",
     default = false
 ) {
     compatibleWith(WHATSAPP)
 
     execute {
-        val fingerprint = Fingerprint(
-            returnType = "Z",
+        Fingerprint(
             filters = listOf(string("ProcessVideoQuality(videoLimitMb="))
-        )
-        val method = fingerprint.methodOrNull ?: return@execute
-
-        method.addInstructions(
-            0,
-            """
+        ).let { match ->
+            match.method.addInstructions(0, """
                 const/4 v0, 0x1
                 return v0
-            """.trimIndent()
-        )
+            """)
+        }
     }
 }
