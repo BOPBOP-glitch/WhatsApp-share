@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "scheme": "semver-prerelease",
-  "current": "1.0.6",
+  "current": "1.0.7-dev.1",
   "nextStable": "1.0.7",
   "developmentFormat": "MAJOR.MINOR.PATCH-dev.N",
   "incrementOnDevelopmentUpdate": true,
