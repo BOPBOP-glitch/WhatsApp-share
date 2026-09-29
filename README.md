@@ -25,9 +25,13 @@ WhatsApp changes its obfuscated code frequently. A patch that works on one versi
 
 ## Add to Morphe
 
-Repository source:
+Use this **same repository URL for every update**:
 
 `https://github.com/BOPBOP-glitch/WhatsApp-share`
+
+Do **not** add `patches-latest.mpp` as a remote source URL. A direct `.mpp` link is a bundle file, not the remote source endpoint Morphe expects.
+
+Morphe reads `patches-bundle.json` from this repository and then downloads the matching versioned release automatically.
 
 Direct add-source link:
 
