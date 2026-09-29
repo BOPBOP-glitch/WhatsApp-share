@@ -18,6 +18,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Enforce compatibility-only scope
+        run: |
+          set -euxo pipefail
+          git fetch origin main --depth=1
+          python3 - <<'PY'
+          import subprocess, sys
+          allowed_prefixes = (
+              "compatibility/",
+              "docs/COMPATIBILITY_V2.md",
+              ".github/workflows/v2-validate.yml",
+              "scripts/verify_compatibility.py",
+          )
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only", "origin/main...HEAD"],
+              text=True
+          ).splitlines()
+          forbidden = [
+              path for path in changed
+              if not any(path == prefix or path.startswith(prefix) for prefix in allowed_prefixes)
+          ]
+          if forbidden:
+              print("Compatibility branch changed forbidden paths:")
+              print("\n".join(forbidden))
+              sys.exit(1)
+          print("Compatibility-only scope verified:", changed)
+          PY
+
       - name: Setup Java
         uses: actions/setup-java@v6.0.0
         with:
