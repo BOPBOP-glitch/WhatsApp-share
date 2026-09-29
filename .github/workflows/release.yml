@@ -190,7 +190,9 @@ jobs:
           curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v$PATCH_VERSION/patches-$PATCH_VERSION.mpp"             -o /tmp/remote-patches-versioned.mpp
 
           unzip -t /tmp/remote-patches-versioned.mpp
-          unzip -Z1 /tmp/remote-patches-versioned.mpp | grep -E '\.dex
+          unzip -Z1 /tmp/remote-patches-versioned.mpp | grep -E '\\.dex "dist/patches-$PATCH_VERSION.mpp" /tmp/remote-patches-versioned.mpp
+          echo "Stable repository source and versioned bundle validated end-to-end."
+
 
           cmp "dist/patches-$PATCH_VERSION.mpp" /tmp/remote-patches-versioned.mpp
           echo "Stable repository source and versioned bundle validated end-to-end."
