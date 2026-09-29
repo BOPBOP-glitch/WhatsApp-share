@@ -32,6 +32,7 @@ jobs:
               ".github/workflows/v2-validate.yml",
               "scripts/verify_compatibility.py",
               "scripts/generate_compatibility_report.py",
+              "scripts/add_compatibility_version.py",
               "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt",
           )
           changed = subprocess.check_output(
@@ -61,7 +62,7 @@ jobs:
           gradle-version: "9.7.1"
 
       - name: Verify frozen patch sources
-        run: python3 scripts/verify_compatibility.py
+        run: python3 scripts/verify_compatibility.py --source-only
 
       - name: Generate metadata
         env:
