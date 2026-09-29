@@ -31,6 +31,7 @@ jobs:
               "docs/COMPATIBILITY_V2.md",
               ".github/workflows/v2-validate.yml",
               "scripts/verify_compatibility.py",
+              "scripts/generate_compatibility_report.py",
               "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt",
           )
           changed = subprocess.check_output(
@@ -81,9 +82,14 @@ jobs:
           unzip -Z1 "$MPP" | grep -E '\.dex$'
           python3 scripts/verify_compatibility.py
 
+      - name: Generate compatibility report
+        run: python3 scripts/generate_compatibility_report.py
+
       - name: Upload bundle
         uses: actions/upload-artifact@v4
         with:
           name: whatsapp-morphe-compatibility
-          path: patches/build/libs/*.mpp
+          path: |
+            patches/build/libs/*.mpp
+            build/compatibility-report.json
           if-no-files-found: error
