@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
+import argparse
 import hashlib
 import json
 import pathlib
-import sys
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PATCH_DIR = ROOT / "patches/src/main/kotlin/app/whatsappmorphe/patches/whatsapp"
+CONSTANTS = ROOT / "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt"
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--source-only",
+    action="store_true",
+    help="Validate frozen sources and compatibility declarations before patches-list.json is regenerated.",
+)
+args = parser.parse_args()
 
 def fail(message):
-    print(f"ERROR: {message}")
-    raise SystemExit(1)
+    raise SystemExit(f"ERROR: {message}")
 
 def load(path):
     with open(ROOT / path, encoding="utf-8") as f:
@@ -18,9 +27,15 @@ def load(path):
 baseline = load("compatibility/patch-baseline.json")
 matrix = load("compatibility/matrix.json")
 patches = load("patches-list.json")
+toolchain = load("compatibility/toolchain-lock.json")
+metadata_baseline = load("compatibility/patch-metadata-baseline.json")
 
+# 1. Freeze every behavior-bearing WhatsApp patch source file.
 expected_files = baseline["files"]
-actual_files = sorted(str(p.relative_to(ROOT)).replace("\\", "/") for p in PATCH_DIR.glob("*.kt"))
+actual_files = sorted(
+    str(p.relative_to(ROOT)).replace("\\", "/")
+    for p in PATCH_DIR.glob("*.kt")
+)
 if actual_files != sorted(expected_files):
     fail(f"Patch source set changed. expected={sorted(expected_files)} actual={actual_files}")
 
@@ -29,80 +44,20 @@ for rel, expected_hash in expected_files.items():
     if actual_hash != expected_hash:
         fail(f"Patch source changed: {rel}")
 
-candidate = matrix["candidateVersion"]
-record = load(f"compatibility/{candidate}.json")
-if record["version"] != candidate:
-    fail("Candidate version record does not match matrix candidateVersion")
-if record["packageName"] != "com.whatsapp":
-    fail("Compatibility record packageName must be com.whatsapp")
-if record["scope"] != "compatibility-only":
-    fail("Compatibility record must remain compatibility-only")
-if record["patchBehaviorChanged"] is not False:
-    fail("patchBehaviorChanged must remain false")
-
-names = {p["name"] for p in patches["patches"]}
-expected_names = {
-    "Anti Detector", "Anti Revoke", "Anti View Once", "Freeze Last Seen",
-    "Hide Read Receipts", "Hide Typing", "Login Fix", "HD Media"
-}
-if names != expected_names:
-    fail(f"Patch metadata set changed. expected={sorted(expected_names)} actual={sorted(names)}")
-
-for patch in patches["patches"]:
-    packages = patch.get("compatiblePackages") or []
-    whatsapp = [x for x in packages if x.get("packageName") == "com.whatsapp"]
-    if len(whatsapp) != 1:
-        fail(f"{patch['name']}: expected exactly one com.whatsapp compatibility declaration")
-    versions = {x.get("version") for x in (whatsapp[0].get("targets") or [])}
-    if candidate not in versions:
-        fail(f"{patch['name']}: candidate {candidate} not declared; got {sorted(versions)}")
-
-print(f"Compatibility validation passed for {candidate}; {len(names)} patch sources remain frozen.")
-
-# Status promotion guard: compatibility states cannot be advanced without evidence.
-tests = record["tests"]
-status = record["status"]
-requirements = {
-    "build-validated": ("bundleBuild", "dexPresent", "patchMetadata"),
-    "patch-validated": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime"),
-    "device-validated": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime", "launch", "loginSession", "sendReceive", "restart"),
-    "stable": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime", "launch", "loginSession", "sendReceive", "restart"),
-}
-for key in requirements.get(status, ()):
-    if tests.get(key) is not True:
-        fail(f"Status {status} requires tests.{key}=true")
-
-matrix_versions = {item["version"]: item for item in matrix.get("versions", [])}
-if candidate not in matrix_versions:
-    fail(f"Candidate {candidate} missing from compatibility/matrix.json")
-
-matrix_entry = matrix_versions[candidate]
-if matrix_entry.get("status") != status:
-    fail(f"Matrix status {matrix_entry.get('status')} does not match record status {status}")
-
-if matrix.get("stableVersion") is not None:
-    stable_version = matrix["stableVersion"]
-    if stable_version not in matrix_versions:
-        fail(f"stableVersion {stable_version} missing from matrix versions")
-    if matrix_versions[stable_version].get("status") != "stable":
-        fail(f"stableVersion {stable_version} is not marked stable")
-
-print(f"Status promotion guard passed: {status}")
-
-# Toolchain lock: compatibility work must not silently change build inputs.
-toolchain = load("compatibility/toolchain-lock.json")
+# 2. Freeze build/toolchain inputs that are outside compatibility scope.
 for rel, expected_hash in toolchain["lockedFiles"].items():
     actual_hash = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
     if actual_hash != expected_hash:
         fail(f"Toolchain/build file changed outside compatibility policy: {rel}")
 
-# Patch metadata lock: names, descriptions, defaults, dependencies and options stay frozen.
-metadata_baseline = load("compatibility/patch-metadata-baseline.json")
+# 3. Freeze user-visible patch metadata and defaults.
 baseline_by_name = {p["name"]: p for p in metadata_baseline["patches"]}
+names = {p["name"] for p in patches["patches"]}
+if names != set(baseline_by_name):
+    fail(f"Patch metadata set changed. expected={sorted(baseline_by_name)} actual={sorted(names)}")
+
 for patch in patches["patches"]:
-    base = baseline_by_name.get(patch["name"])
-    if base is None:
-        fail(f"Patch metadata baseline missing: {patch['name']}")
+    base = baseline_by_name[patch["name"]]
     current = {
         "name": patch.get("name"),
         "description": patch.get("description"),
@@ -114,9 +69,99 @@ for patch in patches["patches"]:
     if current != base:
         fail(f"Patch metadata changed: {patch['name']}")
 
-# Compatibility target declarations may change only by version support, not package identity.
-constants = (ROOT / "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt").read_text(encoding="utf-8")
+# 4. Validate matrix and every per-version record.
+if matrix.get("packageName") != "com.whatsapp":
+    fail("matrix packageName must be com.whatsapp")
+if matrix.get("policy") != "compatibility-only":
+    fail("matrix policy must remain compatibility-only")
+
+entries = matrix.get("versions") or []
+versions = [item.get("version") for item in entries]
+if not versions or len(versions) != len(set(versions)):
+    fail("matrix versions must be non-empty and unique")
+
+candidate = matrix.get("candidateVersion")
+if candidate not in versions:
+    fail(f"Candidate {candidate} missing from compatibility/matrix.json")
+
+requirements = {
+    "untested": (),
+    "build-validated": ("bundleBuild", "dexPresent", "patchMetadata"),
+    "patch-validated": ("bundleBuild", "dexPresent", "patchMetadata", "patchTime"),
+    "device-validated": (
+        "bundleBuild", "dexPresent", "patchMetadata", "patchTime",
+        "launch", "loginSession", "sendReceive", "restart",
+    ),
+    "stable": (
+        "bundleBuild", "dexPresent", "patchMetadata", "patchTime",
+        "launch", "loginSession", "sendReceive", "restart",
+    ),
+    "unsupported": (),
+}
+matrix_by_version = {item["version"]: item for item in entries}
+
+for version, entry in matrix_by_version.items():
+    record_path = ROOT / f"compatibility/{version}.json"
+    if not record_path.exists():
+        fail(f"Missing per-version record: compatibility/{version}.json")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+
+    if record.get("version") != version:
+        fail(f"{version}: record version mismatch")
+    if record.get("packageName") != "com.whatsapp":
+        fail(f"{version}: packageName must be com.whatsapp")
+    if record.get("scope") != "compatibility-only":
+        fail(f"{version}: scope must remain compatibility-only")
+    if record.get("patchBehaviorChanged") is not False:
+        fail(f"{version}: patchBehaviorChanged must remain false")
+    if record.get("patchCount") != len(baseline_by_name):
+        fail(f"{version}: patchCount must remain {len(baseline_by_name)}")
+    if record.get("status") != entry.get("status"):
+        fail(f"{version}: matrix status and record status differ")
+
+    tests = record.get("tests") or {}
+    for key in requirements.get(record.get("status"), ()):
+        if tests.get(key) is not True:
+            fail(f"{version}: status {record.get('status')} requires tests.{key}=true")
+
+stable_version = matrix.get("stableVersion")
+if stable_version is not None:
+    if stable_version not in matrix_by_version:
+        fail(f"stableVersion {stable_version} missing from matrix versions")
+    if matrix_by_version[stable_version].get("status") != "stable":
+        fail(f"stableVersion {stable_version} is not marked stable")
+
+# 5. Constants.kt may change only as a compatibility target declaration.
+constants = CONSTANTS.read_text(encoding="utf-8")
 if 'packageName = "com.whatsapp"' not in constants:
     fail("Constants.kt package identity changed")
 if 'apkFileType = ApkFileType.APK' not in constants:
     fail("Constants.kt APK file type changed")
+
+declared_versions = re.findall(r'version\s*=\s*"(\d+\.\d+\.\d+\.\d+)"', constants)
+if set(declared_versions) != set(versions) or len(declared_versions) != len(versions):
+    fail(
+        "Constants.kt target versions must exactly match matrix versions. "
+        f"constants={declared_versions} matrix={versions}"
+    )
+
+# 6. After metadata generation, require every patch to expose exactly the matrix targets.
+if not args.source_only:
+    for patch in patches["patches"]:
+        packages = patch.get("compatiblePackages") or []
+        whatsapp = [x for x in packages if x.get("packageName") == "com.whatsapp"]
+        if len(whatsapp) != 1:
+            fail(f"{patch['name']}: expected exactly one com.whatsapp compatibility declaration")
+        target_versions = [x.get("version") for x in (whatsapp[0].get("targets") or [])]
+        if set(target_versions) != set(versions) or len(target_versions) != len(versions):
+            fail(
+                f"{patch['name']}: generated targets do not match matrix. "
+                f"targets={target_versions} matrix={versions}"
+            )
+
+mode = "source-only" if args.source_only else "full"
+print(
+    f"Compatibility validation passed ({mode}): "
+    f"{len(names)} frozen patches, {len(versions)} declared WhatsApp version(s), "
+    f"candidate={candidate}."
+)
