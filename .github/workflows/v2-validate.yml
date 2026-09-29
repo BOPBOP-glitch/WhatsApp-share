@@ -29,6 +29,32 @@ jobs:
         with:
           gradle-version: "9.7.1"
 
+      - name: Verify frozen patch sources
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+          with open("compatibility/patch-baseline.json", encoding="utf-8") as f:
+              baseline=json.load(f)
+          expected=baseline["files"]
+          actual_paths=sorted(str(p).replace("\\","/") for p in pathlib.Path("patches/src/main/kotlin/app/whatsappmorphe/patches/whatsapp").glob("*.kt"))
+          expected_paths=sorted(expected)
+          if actual_paths != expected_paths:
+              print("Patch source set changed")
+              print("expected:", expected_paths)
+              print("actual:", actual_paths)
+              sys.exit(1)
+          for path,digest in expected.items():
+              data=pathlib.Path(path).read_bytes()
+              actual=hashlib.sha256(data).hexdigest()
+              if actual != digest:
+                  print(f"Patch source changed: {path}")
+                  print("expected", digest)
+                  print("actual  ", actual)
+                  sys.exit(1)
+          print("Patch source baseline verified:", len(expected), "files")
+          PY
+
       - name: Generate metadata
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,16 +76,23 @@ jobs:
           import json
           with open("patches-list.json", encoding="utf-8") as f:
               data=json.load(f)
+          with open("compatibility/matrix.json", encoding="utf-8") as f:
+              matrix=json.load(f)
           names={p["name"] for p in data["patches"]}
           expected={
               "Anti Detector","Anti Revoke","Anti View Once","Freeze Last Seen",
               "Hide Read Receipts","Hide Typing","Login Fix","HD Media"
           }
           assert names == expected, (names, expected)
+          candidate=matrix["candidateVersion"]
           for p in data["patches"]:
               pkgs=p.get("compatiblePackages") or []
-              assert any(x.get("packageName")=="com.whatsapp" for x in pkgs)
-          print("validated", len(data["patches"]), "existing patches")
+              wa=[x for x in pkgs if x.get("packageName")=="com.whatsapp"]
+              assert len(wa)==1
+              targets=wa[0].get("targets") or []
+              versions={x.get("version") for x in targets}
+              assert candidate in versions, (p["name"], candidate, versions)
+          print("validated", len(data["patches"]), "existing patches for", candidate)
           PY
 
       - name: Upload bundle
