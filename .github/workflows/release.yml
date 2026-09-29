@@ -106,7 +106,7 @@ jobs:
           {
             "created_at": "$CREATED_AT",
             "description": "WhatsApp Morphe Patches v$PATCH_VERSION - compatibility-focused build.",
-            "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp",
+            "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v$PATCH_VERSION/patches-$PATCH_VERSION.mpp",
             "signature_download_url": "",
             "version": "$PATCH_VERSION"
           }
@@ -118,7 +118,7 @@ jobs:
               data=json.load(f)
           assert data["version"] == os.environ["PATCH_VERSION"]
           datetime.fromisoformat(data["created_at"])
-          assert data["download_url"].endswith("/releases/latest/download/patches-latest.mpp")
+          assert data["download_url"].endswith(f"/releases/download/v{os.environ['PATCH_VERSION']}/patches-{os.environ['PATCH_VERSION']}.mpp")
           print("patches-bundle.json validated")
           PY
 
@@ -158,7 +158,10 @@ jobs:
             Permanent latest-release page:
             https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest
 
-            Permanent latest bundle:
+            Permanent Morphe source:
+            https://github.com/BOPBOP-glitch/WhatsApp-share
+
+            Convenience latest bundle:
             https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp
           files: |
             dist/patches-${{ env.PATCH_VERSION }}.mpp
@@ -180,13 +183,14 @@ jobs:
               data=json.load(f)
           assert data["version"] == os.environ["PATCH_VERSION"], data
           datetime.fromisoformat(data["created_at"])
-          assert data["download_url"].endswith("/releases/latest/download/patches-latest.mpp")
+          assert data["download_url"].endswith(f"/releases/download/v{os.environ['PATCH_VERSION']}/patches-{os.environ['PATCH_VERSION']}.mpp")
           print("remote metadata validated:", data["download_url"])
           PY
 
-          curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp"             -o /tmp/remote-patches-latest.mpp
+          curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v$PATCH_VERSION/patches-$PATCH_VERSION.mpp"             -o /tmp/remote-patches-versioned.mpp
 
-          unzip -t /tmp/remote-patches-latest.mpp
-          unzip -Z1 /tmp/remote-patches-latest.mpp | grep -E '\.dex$'
-          cmp dist/patches-latest.mpp /tmp/remote-patches-latest.mpp
-          echo "Permanent latest links validated end-to-end."
+          unzip -t /tmp/remote-patches-versioned.mpp
+          unzip -Z1 /tmp/remote-patches-versioned.mpp | grep -E '\.dex
+
+          cmp "dist/patches-$PATCH_VERSION.mpp" /tmp/remote-patches-versioned.mpp
+          echo "Stable repository source and versioned bundle validated end-to-end."
