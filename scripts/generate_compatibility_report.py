@@ -20,7 +20,15 @@ order = [
 passed = [k for k in order if record["tests"].get(k) is True]
 pending = [k for k in order if record["tests"].get(k) is not True]
 
+gradle_text = (ROOT / "gradle.properties").read_text(encoding="utf-8")
+patch_version = next(
+    line.split("=", 1)[1].strip()
+    for line in gradle_text.splitlines()
+    if line.strip().startswith("version =")
+)
+
 report = {
+    "patchVersion": patch_version,
     "packageName": record["packageName"],
     "version": candidate,
     "status": record["status"],
