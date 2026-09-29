@@ -28,6 +28,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read patch version
+        run: |
+          set -euxo pipefail
+          PATCH_VERSION="$(sed -n 's/^version *= *//p' gradle.properties | xargs)"
+          test -n "$PATCH_VERSION"
+          echo "PATCH_VERSION=$PATCH_VERSION" >> "$GITHUB_ENV"
+          echo "Patch version: $PATCH_VERSION"
+
       - name: Setup Java
         uses: actions/setup-java@v6.0.0
         with:
@@ -39,10 +47,9 @@ jobs:
         with:
           gradle-version: "9.7.1"
 
-      # IMPORTANT:
-      # generatePatchesList depends on the normal JVM build, which can write a class-based .mpp.
-      # Therefore it MUST run before buildAndroid. buildAndroid must be the final bundle build so
-      # the published .mpp contains classes.dex, which Morphe Manager requires.
+      - name: Validate compatibility policy
+        run: python3 scripts/verify_compatibility.py --source-only
+
       - name: Generate patch metadata
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -59,39 +66,37 @@ jobs:
           MPP="$(find patches/build/libs -maxdepth 1 -type f -name '*.mpp' ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
           test -n "$MPP"
           mkdir -p dist
-          cp "$MPP" dist/patches-1.0.4.mpp
+          cp "$MPP" "dist/patches-$PATCH_VERSION.mpp"
+          cp "$MPP" "dist/patches-latest.mpp"
 
       - name: Validate Android MPP
         run: |
           set -euxo pipefail
-          MPP="dist/patches-1.0.4.mpp"
+          MPP="dist/patches-$PATCH_VERSION.mpp"
           test -s "$MPP"
           unzip -t "$MPP"
-
-          # Morphe Manager rejects bundles with no DEX entries.
           unzip -Z1 "$MPP" | tee /tmp/mpp-entries.txt
           grep -E '\.dex$' /tmp/mpp-entries.txt
 
           unzip -p "$MPP" META-INF/MANIFEST.MF | tee /tmp/morphe-manifest.txt
           grep -F "Name: WhatsApp Morphe Patches" /tmp/morphe-manifest.txt
-          grep -F "Version: 1.0.4" /tmp/morphe-manifest.txt
+          grep -F "Version: $PATCH_VERSION" /tmp/morphe-manifest.txt
           grep -F "Patcher-Version: 1.14.1" /tmp/morphe-manifest.txt
 
+          python3 scripts/verify_compatibility.py
           python3 - <<'PY'
-          import json
+          import json, os
           with open("patches-list.json", encoding="utf-8") as f:
-              data = json.load(f)
-          assert data["version"] == "1.0.4", data["version"]
-          patches = data.get("patches", [])
+              data=json.load(f)
+          expected=os.environ["PATCH_VERSION"]
+          assert data["version"] == expected, (data["version"], expected)
+          patches=data.get("patches", [])
           assert len(patches) == 8, len(patches)
-          assert all(
-              any(pkg.get("packageName") == "com.whatsapp" for pkg in (p.get("compatiblePackages") or []))
-              for p in patches
-          )
-          print("patches-list.json validated:", len(patches), "WhatsApp patches")
+          print("patches-list.json validated:", expected, len(patches), "patches")
           PY
 
-          sha256sum "$MPP"
+          cmp "dist/patches-$PATCH_VERSION.mpp" dist/patches-latest.mpp
+          sha256sum "$MPP" dist/patches-latest.mpp
 
       - name: Write Morphe source metadata
         run: |
@@ -100,31 +105,34 @@ jobs:
           cat > patches-bundle.json <<EOF
           {
             "created_at": "$CREATED_AT",
-            "description": "WhatsApp Morphe Patches v1.0.4 - fixes Android DEX packaging so Morphe Manager can load the patches.",
-            "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v1.0.4/patches-1.0.4.mpp",
+            "description": "WhatsApp Morphe Patches v$PATCH_VERSION - compatibility-focused build.",
+            "download_url": "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp",
             "signature_download_url": "",
-            "version": "1.0.4"
+            "version": "$PATCH_VERSION"
           }
           EOF
           python3 - <<'PY'
-          import json
+          import json, os
           from datetime import datetime
           with open("patches-bundle.json", encoding="utf-8") as f:
               data=json.load(f)
-          assert data["version"] == "1.0.4"
+          assert data["version"] == os.environ["PATCH_VERSION"]
           datetime.fromisoformat(data["created_at"])
-          assert data["download_url"].endswith("/v1.0.4/patches-1.0.4.mpp")
+          assert data["download_url"].endswith("/releases/latest/download/patches-latest.mpp")
           print("patches-bundle.json validated")
           PY
+
+      - name: Generate compatibility report
+        run: python3 scripts/generate_compatibility_report.py
 
       - name: Commit published source files
         run: |
           set -euxo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add patches-list.json patches-bundle.json dist/patches-1.0.4.mpp
+          git add patches-list.json patches-bundle.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: publish Morphe source v1.0.4 [skip ci]"
+            git commit -m "chore: publish Morphe source v$PATCH_VERSION [skip ci]"
             git pull --rebase origin main
             git push origin main
           fi
@@ -132,38 +140,53 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whatsapp-morphe-patches-1.0.4
-          path: dist/patches-1.0.4.mpp
+          name: whatsapp-morphe-patches-${{ env.PATCH_VERSION }}
+          path: |
+            dist/patches-${{ env.PATCH_VERSION }}.mpp
+            dist/patches-latest.mpp
+            build/compatibility-report.json
           if-no-files-found: error
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.4
-          name: WhatsApp Morphe Patches v1.0.4
-          body: Fixes Android DEX packaging. Previous releases accidentally published the JVM class bundle after generatePatchesList overwrote the Android bundle.
-          files: dist/patches-1.0.4.mpp
+          tag_name: v${{ env.PATCH_VERSION }}
+          name: WhatsApp Morphe Patches v${{ env.PATCH_VERSION }}
+          body: |
+            Compatibility-focused release for WhatsApp 2.26.27.4.
+
+            Permanent latest-release page:
+            https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest
+
+            Permanent latest bundle:
+            https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp
+          files: |
+            dist/patches-${{ env.PATCH_VERSION }}.mpp
+            dist/patches-latest.mpp
+            build/compatibility-report.json
           make_latest: true
 
-      - name: End-to-end public source validation
+      - name: End-to-end latest-link validation
         run: |
           set -euxo pipefail
-          sleep 5
+          sleep 8
+
           curl -fL --retry 5 --retry-delay 2             "https://raw.githubusercontent.com/BOPBOP-glitch/WhatsApp-share/main/patches-bundle.json?run=${GITHUB_RUN_ID}"             -o /tmp/remote-patches-bundle.json
 
           python3 - <<'PY'
-          import json
+          import json, os
           from datetime import datetime
           with open("/tmp/remote-patches-bundle.json", encoding="utf-8") as f:
               data=json.load(f)
-          assert data["version"] == "1.0.4", data
+          assert data["version"] == os.environ["PATCH_VERSION"], data
           datetime.fromisoformat(data["created_at"])
+          assert data["download_url"].endswith("/releases/latest/download/patches-latest.mpp")
           print("remote metadata validated:", data["download_url"])
           PY
 
-          curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/download/v1.0.4/patches-1.0.4.mpp"             -o /tmp/remote-patches-1.0.4.mpp
+          curl -fL --retry 5 --retry-delay 2             "https://github.com/BOPBOP-glitch/WhatsApp-share/releases/latest/download/patches-latest.mpp"             -o /tmp/remote-patches-latest.mpp
 
-          unzip -t /tmp/remote-patches-1.0.4.mpp
-          unzip -Z1 /tmp/remote-patches-1.0.4.mpp | grep -E '\.dex$'
-          cmp dist/patches-1.0.4.mpp /tmp/remote-patches-1.0.4.mpp
-          echo "Public metadata and Android DEX bundle validated end-to-end."
+          unzip -t /tmp/remote-patches-latest.mpp
+          unzip -Z1 /tmp/remote-patches-latest.mpp | grep -E '\.dex$'
+          cmp dist/patches-latest.mpp /tmp/remote-patches-latest.mpp
+          echo "Permanent latest links validated end-to-end."
