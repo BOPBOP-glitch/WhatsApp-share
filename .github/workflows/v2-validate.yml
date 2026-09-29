@@ -30,6 +30,7 @@ jobs:
               "compatibility/",
               "docs/COMPATIBILITY_V2.md",
               ".github/workflows/v2-validate.yml",
+              ".github/workflows/release.yml",
               "scripts/verify_compatibility.py",
               "scripts/generate_compatibility_report.py",
               "scripts/add_compatibility_version.py",
