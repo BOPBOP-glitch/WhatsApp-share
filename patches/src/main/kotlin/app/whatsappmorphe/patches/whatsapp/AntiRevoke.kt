@@ -6,26 +6,26 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.string
 import app.whatsappmorphe.patches.shared.Constants.WHATSAPP
 
-private const val EXT = "Lapp/pichiwa/extension/extension/WExtension;"
-
 @Suppress("unused")
 val antiRevoke = bytecodePatch(
     name = "Anti Revoke",
-    description = "Prevent others from deleting their messages or statuses.",
+    description = "Keep revoked messages and statuses available locally.",
     default = false
 ) {
     compatibleWith(WHATSAPP)
 
     execute {
-        Fingerprint(
+        val fingerprint = Fingerprint(
+            returnType = "V",
             filters = listOf(string("msgstore/revoke/missing-old-id "))
-        ).let { match ->
-            val returnType = match.method.returnType
-            val returnInst = if (returnType == "V") "return-void" else "const/4 v0, 0x0\n                return v0"
-            match.method.addInstructions(0, """
-                $returnInst
-                :original
-            """)
-        }
+        )
+        val method = fingerprint.methodOrNull ?: return@execute
+
+        method.addInstructions(
+            0,
+            """
+                return-void
+            """.trimIndent()
+        )
     }
 }
