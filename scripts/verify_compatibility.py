@@ -165,3 +165,28 @@ print(
     f"{len(names)} frozen patches, {len(versions)} declared WhatsApp version(s), "
     f"candidate={candidate}."
 )
+
+
+# 7. Version policy: every development update uses a SemVer prerelease counter.
+version_policy = load("compatibility/version-policy.json")
+gradle_text = (ROOT / "gradle.properties").read_text(encoding="utf-8")
+version_match = re.search(r"(?m)^version\s*=\s*([^\s]+)\s*$", gradle_text)
+if not version_match:
+    fail("gradle.properties version is missing")
+project_version = version_match.group(1)
+
+if project_version != version_policy.get("current"):
+    fail(
+        f"Version policy mismatch: gradle={project_version} "
+        f"policy={version_policy.get('current')}"
+    )
+
+if not re.fullmatch(r"\d+\.\d+\.\d+(?:-dev\.\d+)?", project_version):
+    fail(f"Unsupported patch version format: {project_version}")
+
+if "-dev." in project_version:
+    stable = re.sub(r"-dev\.\d+$", "", project_version)
+    if version_policy.get("nextStable") != stable:
+        fail(
+            f"nextStable must be {stable} for development version {project_version}"
+        )
