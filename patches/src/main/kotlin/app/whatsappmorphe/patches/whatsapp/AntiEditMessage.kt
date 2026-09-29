@@ -6,25 +6,20 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.string
 import app.whatsappmorphe.patches.shared.Constants.WHATSAPP
 
-private const val EXT = "Lapp/pichiwa/extension/extension/WExtension;"
-
 @Suppress("unused")
 val antiEditMessage = bytecodePatch(
     name = "Anti Edit",
-    description = "Prevent others from editing sent messages.",
+    description = "Keep the original local message state when the known edit-info path is present.",
     default = false
 ) {
     compatibleWith(WHATSAPP)
 
     execute {
-        Fingerprint(returnType = "V", 
+        val fingerprint = Fingerprint(
+            returnType = "V",
             filters = listOf(string("MessageEditInfoStore/insertEditInfo/missing information in the FMessage"))
-        ).let { match ->
-            match.method.addInstructions(0, """
-                return-void
-                :original
-            """)
-        }
+        )
+        val method = fingerprint.methodOrNull ?: return@execute
+        method.addInstructions(0, "return-void")
     }
 }
-
