@@ -88,3 +88,35 @@ if matrix.get("stableVersion") is not None:
         fail(f"stableVersion {stable_version} is not marked stable")
 
 print(f"Status promotion guard passed: {status}")
+
+# Toolchain lock: compatibility work must not silently change build inputs.
+toolchain = load("compatibility/toolchain-lock.json")
+for rel, expected_hash in toolchain["lockedFiles"].items():
+    actual_hash = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+    if actual_hash != expected_hash:
+        fail(f"Toolchain/build file changed outside compatibility policy: {rel}")
+
+# Patch metadata lock: names, descriptions, defaults, dependencies and options stay frozen.
+metadata_baseline = load("compatibility/patch-metadata-baseline.json")
+baseline_by_name = {p["name"]: p for p in metadata_baseline["patches"]}
+for patch in patches["patches"]:
+    base = baseline_by_name.get(patch["name"])
+    if base is None:
+        fail(f"Patch metadata baseline missing: {patch['name']}")
+    current = {
+        "name": patch.get("name"),
+        "description": patch.get("description"),
+        "default": patch.get("default"),
+        "category": patch.get("category"),
+        "dependencies": patch.get("dependencies") or [],
+        "options": patch.get("options") or [],
+    }
+    if current != base:
+        fail(f"Patch metadata changed: {patch['name']}")
+
+# Compatibility target declarations may change only by version support, not package identity.
+constants = (ROOT / "patches/src/main/kotlin/app/whatsappmorphe/patches/shared/Constants.kt").read_text(encoding="utf-8")
+if 'packageName = "com.whatsapp"' not in constants:
+    fail("Constants.kt package identity changed")
+if 'apkFileType = ApkFileType.APK' not in constants:
+    fail("Constants.kt APK file type changed")
